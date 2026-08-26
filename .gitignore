@@ -3,7 +3,7 @@ dist
 dist-ssr
 *.local
 
-.env
+# .env коммитится: там только публичные значения (см. комментарий внутри).
 .env.local
 .env.*.local
 

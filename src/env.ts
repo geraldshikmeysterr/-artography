@@ -25,4 +25,19 @@ export function readEnv(source: RawEnv): AppEnv {
   };
 }
 
-export const ENV: AppEnv = readEnv(import.meta.env as unknown as RawEnv);
+const EMPTY_ENV: AppEnv = {
+  discordClientId: '', supabaseUrl: '', supabaseAnonKey: '', mapId: '', devCanEdit: false,
+};
+
+let error: string | null = null;
+let resolved: AppEnv;
+try {
+  resolved = readEnv(import.meta.env as unknown as RawEnv);
+} catch (cause) {
+  // Не роняем приложение белым экраном: main.tsx покажет понятный экран ошибки.
+  error = (cause as Error).message;
+  resolved = EMPTY_ENV;
+}
+
+export const ENV: AppEnv = resolved;
+export const ENV_ERROR: string | null = error;
