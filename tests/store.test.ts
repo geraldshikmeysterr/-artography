@@ -31,7 +31,10 @@ describe('app store', () => {
 
   it('refuses to arm a drawing tool without edit rights', () => {
     useAppStore.setState({
-      session: { userId: 'u', username: 'u', avatarUrl: null, token: null, canEdit: false },
+      session: {
+        userId: 'u', username: 'u', avatarUrl: null,
+        token: null, canEdit: false, canEditReason: 'role-not-assigned',
+      },
     });
     useAppStore.getState().selectTool('region');
     expect(useAppStore.getState().tool).toBe('none');

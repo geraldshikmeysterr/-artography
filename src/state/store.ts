@@ -11,6 +11,8 @@ export interface Session {
   avatarUrl: string | null;
   token: string | null;
   canEdit: boolean;
+  /** Почему нет прав на редактирование; null, когда права есть. */
+  canEditReason: string | null;
 }
 
 interface AppState {

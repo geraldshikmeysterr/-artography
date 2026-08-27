@@ -59,17 +59,31 @@ Deno.serve(async (req) => {
   const me = await meResponse.json();
 
   // 3. Есть ли роль редактора — спрашиваем бот-токеном (ТЗ §8.2).
+  // Причина отказа возвращается явно: молчаливый false невозможно
+  // диагностировать, а отличать «бота нет на сервере» от «роль не выдана»
+  // нужно и пользователю, и при настройке.
   let canEdit = false;
+  let reason: string | null = null;
   const editorRole = Deno.env.get('DISCORD_EDITOR_ROLE_ID');
   const botToken = Deno.env.get('DISCORD_BOT_TOKEN');
-  if (guildId && editorRole && botToken) {
+
+  if (!guildId) {
+    reason = 'no-guild-context';
+  } else if (!editorRole || !botToken) {
+    reason = 'not-configured';
+  } else {
     const memberResponse = await fetch(
       `https://discord.com/api/guilds/${guildId}/members/${me.id}`,
       { headers: { Authorization: `Bot ${botToken}` } },
     );
-    if (memberResponse.ok) {
+    if (!memberResponse.ok) {
+      // Чаще всего: бот не приглашён на этот сервер.
+      reason = `member-lookup-failed-${memberResponse.status}`;
+    } else {
       const member = await memberResponse.json();
-      canEdit = Array.isArray(member.roles) && member.roles.includes(editorRole);
+      const roles: string[] = Array.isArray(member.roles) ? member.roles : [];
+      canEdit = roles.includes(editorRole);
+      if (!canEdit) reason = 'role-not-assigned';
     }
   }
 
@@ -96,5 +110,6 @@ Deno.serve(async (req) => {
       avatar: me.avatar ?? null,
     },
     canEdit,
+    canEditReason: reason,
   });
 });

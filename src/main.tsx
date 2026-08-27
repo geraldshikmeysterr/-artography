@@ -23,6 +23,7 @@ if (ENV_ERROR) {
         avatarUrl: null,
         token: null,
         canEdit: false,
+        canEditReason: 'session-failed',
       });
     });
 }

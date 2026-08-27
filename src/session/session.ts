@@ -8,6 +8,7 @@ export interface ExchangeResult {
   discordAccessToken: string;
   user: { id: string; username: string; avatar: string | null };
   canEdit: boolean;
+  canEditReason: string | null;
 }
 
 export async function exchangeCode(
@@ -38,6 +39,7 @@ function localSession(): Session {
     avatarUrl: null,
     token: null,
     canEdit: import.meta.env.DEV && ENV.devCanEdit,
+    canEditReason: null,
   };
 }
 
@@ -65,5 +67,6 @@ export async function startSession(): Promise<Session> {
     avatarUrl: avatarUrl(result.user.id, result.user.avatar),
     token: result.token,
     canEdit: result.canEdit,
+    canEditReason: result.canEditReason ?? null,
   };
 }
