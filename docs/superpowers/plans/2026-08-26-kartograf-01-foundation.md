@@ -1406,7 +1406,7 @@ git commit -m "feat: Discord Activity bootstrap with OAuth code exchange and Sup
 
 **Interfaces:**
 - Consumes: секреты окружения `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`,
-  `DISCORD_BOT_TOKEN`, `DISCORD_EDITOR_ROLE_ID`, `SUPABASE_JWT_SECRET`.
+  `DISCORD_BOT_TOKEN`, `DISCORD_EDITOR_ROLE_ID`, `KARTOGRAF_JWT_SECRET`.
 - Produces: `POST /functions/v1/discord-auth` с телом `{ code: string, guildId: string }` →
   `200 { token: string, discordAccessToken: string, user: { id, username, avatar }, canEdit: boolean }`.
 
@@ -1430,7 +1430,7 @@ const json = (body: unknown, status = 200) =>
   });
 
 async function signingKey(): Promise<CryptoKey> {
-  const secret = Deno.env.get('SUPABASE_JWT_SECRET')!;
+  const secret = Deno.env.get('KARTOGRAF_JWT_SECRET')!;
   return crypto.subtle.importKey(
     'raw',
     new TextEncoder().encode(secret),
@@ -1508,13 +1508,18 @@ Deno.serve(async (req) => {
 
 - [ ] **Шаг 2: Прописать секреты и задеплоить**
 
+Секреты задаёт владелец проекта — либо командой ниже, либо, если CLI не
+залогинен под нужным аккаунтом, через Dashboard → Project Settings →
+Edge Functions → Secrets. Префикс `SUPABASE_` зарезервирован платформой и
+для своих секретов недоступен — отсюда имя `KARTOGRAF_JWT_SECRET`.
+
 ```bash
 supabase secrets set \
   DISCORD_CLIENT_ID=... \
   DISCORD_CLIENT_SECRET=... \
   DISCORD_BOT_TOKEN=... \
   DISCORD_EDITOR_ROLE_ID=... \
-  SUPABASE_JWT_SECRET=...
+  KARTOGRAF_JWT_SECRET=...
 supabase functions deploy discord-auth --no-verify-jwt
 ```
 
