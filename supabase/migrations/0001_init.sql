@@ -16,7 +16,7 @@ $$;
 create table maps (
   id         uuid primary key default gen_random_uuid(),
   name       text not null,
-  sea_level  smallint not null default 0,
+  sea_level  smallint not null default 64,
   created_at timestamptz not null default now()
 );
 
@@ -152,4 +152,4 @@ alter publication supabase_realtime add table
 
 -- Единственная карта проекта. ID совпадает с VITE_MAP_ID.
 insert into maps (id, name, sea_level)
-values ('00000000-0000-0000-0000-000000000001', 'Основная карта', 0);
+values ('00000000-0000-0000-0000-000000000001', 'Основная карта', 64);

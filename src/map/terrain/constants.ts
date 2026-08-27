@@ -17,6 +17,14 @@ export const TEX_SIZE = CHUNK_CELLS + 2 * APRON;
 export const HEIGHT_MIN = -2048;
 export const HEIGHT_MAX = 2047;
 
+/**
+ * Уровень моря по умолчанию — выше нулевой высоты нетронутой карты.
+ * Мир начинается океаном, пользователь поднимает сушу. Если бы дефолт был 0,
+ * вся нетронутая карта лежала бы ровно на уровне моря и граница каждого мазка
+ * кисти сама становилась бы береговой линией — со ступеньками по ячейкам.
+ */
+export const DEFAULT_SEA_LEVEL = 64;
+
 export const DEFAULT_CONTOUR_STEP = 64;
 export const MAJOR_CONTOUR_EVERY = 5;
 

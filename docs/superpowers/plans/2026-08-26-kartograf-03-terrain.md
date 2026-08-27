@@ -18,7 +18,7 @@
 
 - Мир рельефа разбит на **чанки 64×64 ячейки**; подгружаются только чанки в видимой области, остальное не хранится в памяти клиента. (ТЗ §5.2)
 - Высота ячейки — **целое число**, хранится в Supabase как `bytea` (Int16 little-endian), **не JSON**. (ТЗ §5.2)
-- Глобальный `sea_level` хранится в таблице `maps`; вода рендерится там, где высота ниже него. Отдельных объектов «море»/«озеро» в БД **нет**. (ТЗ §5.2, §5.3)
+- Глобальный `sea_level` хранится в таблице `maps`; вода рендерится там, где высота ниже него. Отдельных объектов «море»/«озеро» в БД **нет**. (ТЗ §5.2, §5.3) Значение по умолчанию — **64**, то есть выше нулевой высоты: нетронутый мир это океан, пользователь поднимает сушу.
 - Рендер — **fragment-шейдер на GPU**, не CPU-пересчёт: изолинии со сглаживанием через `fwidth()`, мягкое освещение по градиенту высоты, автоматическая вода. Считаются только видимые пиксели экрана. (ТЗ §5.3)
 - Кисть — круглая, с настраиваемым радиусом и силой, **мягкие растушёванные края** без ступенек. Пока ЛКМ зажата — рисование полностью локальное, **без обращений к серверу**. (ТЗ §5.4)
 - На сервер уходят **только реально изменившиеся чанки**, раз в ~1 секунду и обязательно при отпускании кнопки, бинарно. (ТЗ §5.5)
@@ -87,6 +87,14 @@ export const APRON = 1;               // фартук по краю тексту
 export const TEX_SIZE = 66;           // CHUNK_CELLS + 2 * APRON
 export const HEIGHT_MIN = -2048;
 export const HEIGHT_MAX = 2047;
+/**
+ * Уровень моря по умолчанию — ВЫШЕ нулевой высоты нетронутой карты.
+ * Мир начинается океаном, пользователь поднимает сушу. При дефолте 0 вся
+ * нетронутая карта лежала бы ровно на уровне моря, и граница каждого мазка
+ * кисти сама становилась бы береговой линией со ступеньками по ячейкам.
+ */
+export const DEFAULT_SEA_LEVEL = 64;
+
 export const DEFAULT_CONTOUR_STEP = 64;
 export const MAJOR_CONTOUR_EVERY = 5;
 export const CHUNK_CACHE_LIMIT = 256; // сколько чанков держим в памяти
@@ -1058,7 +1066,7 @@ export function createTerrainLayer(store: ChunkStore): TerrainLayer;
 `src/map/terrain/terrain.frag.ts`:
 
 ```ts
-export const TERRAIN_FRAGMENT = /* glsl */ `
+export const TERRAIN_FRAGMENT = /* glsl */ `#version 300 es
 precision highp float;
 
 in vec2 vUV;
@@ -1077,6 +1085,9 @@ uniform vec3  uLandHigh;
 uniform vec3  uWaterShallow;
 uniform vec3  uWaterDeep;
 uniform vec3  uLineColor;
+
+/** Порог «производная практически ноль» — плоский участок. */
+const float EPS = 1e-5;
 
 void main() {
   vec2 uv = uUvOrigin + vUV * uUvScale;
@@ -1108,25 +1119,42 @@ void main() {
 
   // Изолинии: расстояние до ближайшей ступени, нормированное экранной
   // производной — толщина линии постоянна на любом зуме (ТЗ §5.3).
-  float f = h / uContourStep;
-  float minor = 1.0 - smoothstep(0.0, fwidth(f) * 1.1, abs(fract(f + 0.5) - 0.5));
+  //
+  // Две проверки ниже обязательны, обе найдены визуальной проверкой:
+  // 1) На идеально плоском участке fwidth() == 0, границы smoothstep
+  //    совпадают, результат вырождается и вся равнина заливается цветом
+  //    линии. Плоскость линий не несёт — отсюда порог EPS.
+  // 2) Сетка изолиний смещена на полшага (линии по 32, 96, 160...), чтобы
+  //    ноль не попадал на уровень изолинии: иначе нетронутая равнина лежит
+  //    ровно НА линии и её граница рисуется ступеньками по ячейкам.
+  float f = h / uContourStep - 0.5;
+  float df = fwidth(f);
+  float minor = df > EPS
+    ? 1.0 - smoothstep(0.0, df * 1.1, abs(fract(f + 0.5) - 0.5))
+    : 0.0;
 
-  float fm = h / (uContourStep * uMajorEvery);
-  float major = 1.0 - smoothstep(0.0, fwidth(fm) * 1.1, abs(fract(fm + 0.5) - 0.5));
+  float fm = h / (uContourStep * uMajorEvery) - 0.5;
+  float dfm = fwidth(fm);
+  float major = dfm > EPS
+    ? 1.0 - smoothstep(0.0, dfm * 1.1, abs(fract(fm + 0.5) - 0.5))
+    : 0.0;
 
   float lineStrength = clamp(minor * 0.30 + major * 0.55, 0.0, 1.0);
   if (above < 0.0) lineStrength *= 0.45;
   color = mix(color, uLineColor, lineStrength);
 
   // Береговая линия — самая контрастная изолиния карты.
-  float coast = 1.0 - smoothstep(0.0, fwidth(above) * 1.4, abs(above));
+  float dc = fwidth(above);
+  float coast = dc > EPS
+    ? 1.0 - smoothstep(0.0, dc * 1.4, abs(above))
+    : 0.0;
   color = mix(color, uLineColor, coast * 0.85);
 
   finalColor = vec4(color, 1.0);
 }
 `;
 
-export const TERRAIN_VERTEX = /* glsl */ `
+export const TERRAIN_VERTEX = /* glsl */ `#version 300 es
 in vec2 aPosition;
 in vec2 aUV;
 out vec2 vUV;
@@ -1299,9 +1327,15 @@ export function createTerrainLayer(store: ChunkStore): TerrainLayer {
 Run: `npm run dev`, открыть консоль браузера.
 Expected: **никаких** ошибок компиляции шейдера.
 
-Если шейдер не компилируется:
-1. Ошибка про `in`/`out`/`texture`/`textureSize`/`finalColor` → добавить
-   первой строкой обоих исходников `#version 300 es`.
+**Проверено на практике:** Pixi 8.20 НЕ подставляет директиву версии сам,
+поэтому `#version 300 es` первой строкой обоих исходников обязателен — без
+неё компилятор ругается «'in' : storage qualifier supported in GLSL ES 3.00
+and above only», а Pixi прячет это в предупреждение
+`useProgram: program not valid` вместо ошибки. Чтобы достать настоящий лог,
+скомпилируйте исходник вручную в консоли браузера через
+`gl.getShaderInfoLog`.
+
+Прочие возможные проблемы:
 2. Ошибка про `fwidth` → включён контекст WebGL1; убедиться, что
    `app.init({ preference: 'webgl' })` даёт WebGL2 (проверить
    `app.renderer.gl instanceof WebGL2RenderingContext`).
