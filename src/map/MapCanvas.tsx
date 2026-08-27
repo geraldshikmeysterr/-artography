@@ -8,6 +8,9 @@ import { screenToWorld } from './camera';
 import { createChunkStore } from './terrain/chunkStore';
 import { createTerrainLayer, isTerrainVisible, type TerrainLayer } from './terrain/terrainLayer';
 import { makeTerrainHandlers, useTerrainTool } from './terrain/terrainTool';
+import { createTerrainSync } from './terrain/terrainSync';
+import { chunkRange } from './terrain/chunkMath';
+import { visibleWorldBounds } from './camera';
 import { useAppStore } from '../state/store';
 import { useSeaLevel } from '../state/seaLevel';
 
@@ -33,6 +36,9 @@ export function MapCanvas() {
       terrain = terrainLayer;
       created.layers.terrain.addChild(terrainLayer.view);
 
+      const sync = createTerrainSync(store, terrainLayer);
+      sync.start();
+
       const grid = createGridLayer();
       const brushCursor = createBrushCursor();
       created.layers.overlay.addChild(grid.view, brushCursor.view);
@@ -48,6 +54,13 @@ export function MapCanvas() {
 
         applyCamera(created, camera, viewport);
         terrainLayer.update(camera, viewport, useSeaLevel.getState().value);
+
+        // Догружаем чанки видимой области; ensureLoaded сам не повторяет
+        // запрос по уже запрошенному диапазону.
+        if (isTerrainVisible(camera.zoom)) {
+          void sync.ensureLoaded(chunkRange(visibleWorldBounds(camera, viewport), 1))
+            .catch((cause) => console.error('terrain load failed', cause));
+        }
 
         // Рельеф непрозрачен и сам служит фоном. Сетка нужна только там, где
         // он не рисуется — на предельном отдалении, чтобы не остаться в пустоте.
@@ -74,8 +87,11 @@ export function MapCanvas() {
       host.addEventListener('pointermove', onHostPointerMove);
       detachers.push(() => host.removeEventListener('pointermove', onHostPointerMove));
 
-      // Сохранение изменённых чанков подключается в Плане 03, задача 8.
-      const terrainHandlers = makeTerrainHandlers(terrainLayer, () => { redraw(); });
+      // ТЗ §5.5: при отпускании кнопки сохраняем обязательно.
+      const terrainHandlers = makeTerrainHandlers(terrainLayer, () => {
+        redraw();
+        void sync.flush();
+      });
       detachers.push(attachFreehand(host, () =>
         useAppStore.getState().tool === 'terrain' ? terrainHandlers : null));
 
@@ -85,6 +101,13 @@ export function MapCanvas() {
           height: host.clientHeight,
         });
       };
+
+      const flushBeforeUnload = () => { void sync.flush(); };
+      window.addEventListener('beforeunload', flushBeforeUnload);
+      detachers.push(() => {
+        window.removeEventListener('beforeunload', flushBeforeUnload);
+        sync.stop();
+      });
 
       detachers.push(attachCameraInput(host));
       detachers.push(useAppStore.subscribe(redraw));
