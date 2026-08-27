@@ -859,8 +859,26 @@ function fromParts(parts: number[][][][]): PolygonGeometry | null {
     : { type: 'MultiPolygon', coordinates: parts };
 }
 
-/** unkink + выбросить куски-мусор, которые оставляет булева операция. */
+/**
+ * Выбрасывает куски-мусор, которые оставляет булева операция.
+ * Дырки сохраняются: turf уже вернул корректную геометрию, трогать её кольца
+ * нельзя. Именно поэтому здесь НЕ вызывается unkinkPolygon — он раскладывает
+ * донат на два независимых полигона, и дырка превращается в остров
+ * (площадь складывается вместо вычитания).
+ */
 export function normalize(geometry: PolygonGeometry): PolygonGeometry | null {
+  const polygons = geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.coordinates;
+  const parts = polygons.filter(
+    (rings) => polygonArea({ type: 'Polygon', coordinates: rings }) >= MIN_PART_AREA,
+  );
+  return fromParts(parts);
+}
+
+/**
+ * Приводит сырое кольцо к корректной геометрии. Здесь unkinkPolygon уместен:
+ * росчерк мышью запросто пересекает сам себя, а дырок у него ещё нет.
+ */
+export function unkinkAndClean(geometry: PolygonGeometry): PolygonGeometry | null {
   const pieces = unkinkPolygon(toFeature(geometry));
   const parts: number[][][][] = [];
   for (const piece of pieces.features) {
@@ -880,7 +898,7 @@ export function ringToGeometry(ring: number[][]): PolygonGeometry | null {
   if (fx !== lx || fy !== ly) closed.push([fx, fy]);
   if (closed.length < 4) return null;
   try {
-    return normalize({ type: 'Polygon', coordinates: [closed] });
+    return unkinkAndClean({ type: 'Polygon', coordinates: [closed] });
   } catch {
     return null;
   }
@@ -888,6 +906,8 @@ export function ringToGeometry(ring: number[][]): PolygonGeometry | null {
 
 function unionAll(geometries: PolygonGeometry[]): PolygonGeometry | null {
   if (geometries.length === 0) return null;
+  // turf 7 требует минимум две геометрии в коллекции.
+  if (geometries.length === 1) return geometries[0];
   const merged = union(featureCollection(geometries.map(toFeature)));
   return merged ? (merged.geometry as PolygonGeometry) : null;
 }
