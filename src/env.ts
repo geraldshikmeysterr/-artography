@@ -1,3 +1,5 @@
+import { PUBLIC_CONFIG, type PublicConfig } from './config.public';
+
 export interface AppEnv {
   /** Пусто до тех пор, пока не заполнен Application ID в Developer Portal. */
   discordClientId: string;
@@ -9,18 +11,19 @@ export interface AppEnv {
 
 type RawEnv = Record<string, string | undefined>;
 
-function required(source: RawEnv, key: string): string {
-  const value = source[key];
+/** Переменная окружения перебивает публичное значение по умолчанию. */
+function withDefault(source: RawEnv, key: string, fallback: string): string {
+  const value = source[key] || fallback;
   if (!value) throw new Error(`Missing environment variable ${key}`);
   return value;
 }
 
-export function readEnv(source: RawEnv): AppEnv {
+export function readEnv(source: RawEnv, defaults: PublicConfig = PUBLIC_CONFIG): AppEnv {
   return {
     discordClientId: source.VITE_DISCORD_CLIENT_ID ?? '',
-    supabaseUrl: required(source, 'VITE_SUPABASE_URL'),
-    supabaseAnonKey: required(source, 'VITE_SUPABASE_ANON_KEY'),
-    mapId: required(source, 'VITE_MAP_ID'),
+    supabaseUrl: withDefault(source, 'VITE_SUPABASE_URL', defaults.supabaseUrl),
+    supabaseAnonKey: withDefault(source, 'VITE_SUPABASE_ANON_KEY', defaults.supabaseAnonKey),
+    mapId: withDefault(source, 'VITE_MAP_ID', defaults.mapId),
     devCanEdit: source.VITE_DEV_CAN_EDIT === 'true',
   };
 }

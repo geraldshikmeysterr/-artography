@@ -18,3 +18,7 @@ npm-debug.log*
 .vscode/*
 !.vscode/extensions.json
 .playwright-mcp
+
+# Vercel вырезает .env-файлы из исходников при сборке — публичные значения
+# лежат в src/config.public.ts, а .env остаётся только для локальных переопределений.
+.env
