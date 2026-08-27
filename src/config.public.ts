@@ -16,12 +16,15 @@
  * ротировать без коммита.
  */
 export interface PublicConfig {
+  /** Application ID приложения Discord. Публичен: виден в URL активности. */
+  discordClientId: string;
   supabaseUrl: string;
   supabaseAnonKey: string;
   mapId: string;
 }
 
 export const PUBLIC_CONFIG: PublicConfig = {
+  discordClientId: '1541040746279136826',
   supabaseUrl: 'https://hleafgtowbcgpjevvyno.supabase.co',
   supabaseAnonKey:
     'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhsZWFmZ3Rvd2JjZ3BqZXZ2eW5vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc3OTEyMjcsImV4cCI6MjEwMzM2NzIyN30.Y8JCUV_yLp_379pIJNdK8qI8bmZItIie_Jh3RwGmH3c',

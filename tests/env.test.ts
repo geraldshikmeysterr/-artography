@@ -19,6 +19,7 @@ describe('readEnv', () => {
   // обязаны иметь работающий дефолт прямо в коде.
   it('falls back to the committed public config when the environment is empty', () => {
     const env = readEnv({});
+    expect(env.discordClientId).toBe(PUBLIC_CONFIG.discordClientId);
     expect(env.supabaseUrl).toBe(PUBLIC_CONFIG.supabaseUrl);
     expect(env.supabaseAnonKey).toBe(PUBLIC_CONFIG.supabaseAnonKey);
     expect(env.mapId).toBe(PUBLIC_CONFIG.mapId);
@@ -33,8 +34,8 @@ describe('readEnv', () => {
     expect(() => readEnv({}, blank)).toThrow(/VITE_SUPABASE_URL/);
   });
 
-  it('tolerates an empty Discord client id until the portal is configured', () => {
-    expect(readEnv({}).discordClientId).toBe('');
+  it('lets the environment override the Discord client id', () => {
+    expect(readEnv({ VITE_DISCORD_CLIENT_ID: '999' }).discordClientId).toBe('999');
   });
 
   it('treats dev edit rights as opt-in', () => {

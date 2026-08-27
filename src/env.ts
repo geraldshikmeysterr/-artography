@@ -1,7 +1,6 @@
 import { PUBLIC_CONFIG, type PublicConfig } from './config.public';
 
 export interface AppEnv {
-  /** Пусто до тех пор, пока не заполнен Application ID в Developer Portal. */
   discordClientId: string;
   supabaseUrl: string;
   supabaseAnonKey: string;
@@ -20,7 +19,7 @@ function withDefault(source: RawEnv, key: string, fallback: string): string {
 
 export function readEnv(source: RawEnv, defaults: PublicConfig = PUBLIC_CONFIG): AppEnv {
   return {
-    discordClientId: source.VITE_DISCORD_CLIENT_ID ?? '',
+    discordClientId: withDefault(source, 'VITE_DISCORD_CLIENT_ID', defaults.discordClientId),
     supabaseUrl: withDefault(source, 'VITE_SUPABASE_URL', defaults.supabaseUrl),
     supabaseAnonKey: withDefault(source, 'VITE_SUPABASE_ANON_KEY', defaults.supabaseAnonKey),
     mapId: withDefault(source, 'VITE_MAP_ID', defaults.mapId),
