@@ -59,7 +59,7 @@ export function TerrainPanel() {
 
       <Slider label="Радиус" value={radius}
               min={MIN_RADIUS} max={MAX_RADIUS} step={4} onChange={setRadius} />
-      <Slider label={shape === 'smooth' ? 'Скорость' : 'Сила'} value={strength}
+      <Slider label="Сила" value={strength}
               min={MIN_STRENGTH} max={MAX_STRENGTH} step={5} onChange={setStrength} />
 
       <div style={{ fontSize: 11, opacity: .5, lineHeight: 1.6 }}>
@@ -67,7 +67,7 @@ export function TerrainPanel() {
           ? 'Любая кнопка мыши — сглаживать'
           : 'ЛКМ — понизить · ПКМ — повысить'}
         <br />Ctrl + колесо — радиус
-        <br />Shift + колесо — {shape === 'smooth' ? 'скорость' : 'сила'}
+        <br />Shift + колесо — сила
       </div>
     </div>
   );

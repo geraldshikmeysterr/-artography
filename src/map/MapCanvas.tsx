@@ -57,8 +57,12 @@ export function MapCanvas() {
         // Догружаем чанки видимой области; ensureLoaded сам не повторяет
         // запрос по уже запрошенному диапазону.
         if (isTerrainVisible(camera.zoom)) {
-          void sync.ensureLoaded(chunkRange(visibleWorldBounds(camera, viewport), 1))
+          const range = chunkRange(visibleWorldBounds(camera, viewport), 1);
+          void sync.ensureLoaded(range)
             .catch((cause) => console.error('terrain load failed', cause));
+          // Выгрузка идёт через sync, а не через слой: забыть выгруженный
+          // чанк обязательно, иначе он не перезагрузится при возврате.
+          sync.evict(range);
         }
 
         // Рельеф непрозрачен и сам служит фоном. Сетка нужна только там, где

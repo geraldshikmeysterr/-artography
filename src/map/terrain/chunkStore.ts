@@ -22,6 +22,7 @@ export interface ChunkStore {
   size(): number;
   sampleHeight(wx: number, wy: number): number;
   markDirty(cx: number, cy: number): void;
+  isDirty(cx: number, cy: number): boolean;
   takeDirty(): Chunk[];
   hasDirty(): boolean;
   evictOutside(range: ChunkRangeBox): string[];
@@ -89,6 +90,7 @@ export function createChunkStore(): ChunkStore {
     sampleHeight,
 
     markDirty(cx, cy) { dirty.add(chunkKey(cx, cy)); },
+    isDirty: (cx, cy) => dirty.has(chunkKey(cx, cy)),
     hasDirty: () => dirty.size > 0,
 
     takeDirty() {

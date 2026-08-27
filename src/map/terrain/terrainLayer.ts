@@ -141,8 +141,6 @@ export function createTerrainLayer(store: ChunkStore): TerrainLayer {
     for (const [key, chunkView] of [...views]) {
       if (!wanted.has(key)) disposeView(key, chunkView);
     }
-
-    store.evictOutside(range);
   }
 
   return {

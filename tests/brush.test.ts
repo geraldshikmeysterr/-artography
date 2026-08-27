@@ -149,6 +149,42 @@ describe('smoothBrush', () => {
     expect(left).toBeGreaterThan(0);
   });
 
+  // Жалоба «сглаживание слишком слабое» была про фиксированное ядро 3x3:
+  // крупную форму оно почти не трогало. Ядро теперь растёт с радиусом.
+  // Мерим крутизну склона на краю плато: внутри однородной области среднее
+  // равно ей самой, и сглаживать там нечего.
+  const plateau = () => {
+    const store = createChunkStore();
+    const chunk = store.ensure(0, 0);
+    for (let iy = 12; iy < 32; iy++) {
+      for (let ix = 12; ix < 32; ix++) chunk.heights[cellIndex(ix, iy)] = 800;
+    }
+    return store;
+  };
+  /** Перепад через край плато — прямая мера «резкого угла». */
+  const edgeDrop = (store: ReturnType<typeof createChunkStore>) => {
+    const h = store.get(0, 0)!.heights;
+    return h[cellIndex(13, 22)] - h[cellIndex(11, 22)];
+  };
+
+  it('softens a sharp plateau edge in a single application', () => {
+    const store = plateau();
+    const before = edgeDrop(store);
+    expect(before).toBe(800);
+
+    smoothBrush(store, CELL_SIZE * 12, CELL_SIZE * 22, CELL_SIZE * 20, 1);
+    expect(edgeDrop(store)).toBeLessThan(before * 0.5);
+  });
+
+  it('softens more with a wider brush', () => {
+    const narrow = plateau();
+    smoothBrush(narrow, CELL_SIZE * 12, CELL_SIZE * 22, CELL_SIZE * 6, 1);
+    const wide = plateau();
+    smoothBrush(wide, CELL_SIZE * 12, CELL_SIZE * 22, CELL_SIZE * 20, 1);
+
+    expect(edgeDrop(wide)).toBeLessThan(edgeDrop(narrow));
+  });
+
   it('does nothing for a zero radius or zero amount', () => {
     const store = spikeStore();
     store.takeDirty();
