@@ -25,8 +25,11 @@ async function signingKey(): Promise<CryptoKey> {
   );
 }
 
+const CLIENT_ID = Deno.env.get('DISCORD_CLIENT_ID') ?? '1541040745279135825';
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
+
   if (req.method !== 'POST') return json({ error: 'method not allowed' }, 405);
 
   const { code, guildId } = await req.json().catch(() => ({}));
@@ -37,7 +40,7 @@ Deno.serve(async (req) => {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
-      client_id: Deno.env.get('DISCORD_CLIENT_ID') ?? '1541040746279136826',
+      client_id: CLIENT_ID,
       client_secret: Deno.env.get('DISCORD_CLIENT_SECRET')!,
       grant_type: 'authorization_code',
       code,
