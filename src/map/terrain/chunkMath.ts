@@ -40,3 +40,16 @@ export function chunkRange(bounds: Bounds, margin = 1) {
 }
 
 export const cellIndex = (ix: number, iy: number): number => iy * CHUNK_CELLS + ix;
+
+/** Сквозная нумерация ячеек по всему миру → чанк плюс ячейка внутри него. */
+export function globalCellToChunk(gx: number, gy: number): CellCoord {
+  const cx = Math.floor(gx / CHUNK_CELLS);
+  const cy = Math.floor(gy / CHUNK_CELLS);
+  return { cx, cy, ix: gx - cx * CHUNK_CELLS, iy: gy - cy * CHUNK_CELLS };
+}
+
+/** Мировая координата центра ячейки со сквозным номером gx. */
+export const globalCellCentre = (g: number): number => (g + 0.5) * CELL_SIZE;
+
+/** Сквозной номер ячейки, содержащей мировую координату. */
+export const worldToGlobalCell = (w: number): number => Math.floor(w / CELL_SIZE);

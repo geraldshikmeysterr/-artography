@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { falloff, stampBrush, strokeBrush } from '../src/map/terrain/brush';
+import { falloff, stampBrush, smoothBrush, paintStroke } from '../src/map/terrain/brush';
 import { createChunkStore } from '../src/map/terrain/chunkStore';
 import { CELL_SIZE, CHUNK_WORLD, HEIGHT_MAX, HEIGHT_MIN } from '../src/map/terrain/constants';
-import { cellIndex } from '../src/map/terrain/chunkMath';
+import { cellIndex, worldToCell } from '../src/map/terrain/chunkMath';
 
 describe('falloff', () => {
   it('is 1 at the centre and 0 at the rim', () => {
@@ -96,14 +96,119 @@ describe('stampBrush', () => {
   });
 });
 
-describe('strokeBrush', () => {
-  it('paints a continuous band between two distant points', () => {
+describe('smoothBrush', () => {
+  const spikeStore = () => {
     const store = createChunkStore();
-    const settings = { radius: CELL_SIZE * 2, strength: 100, mode: 'raise' as const };
-    strokeBrush(store, CELL_SIZE * 4, CELL_SIZE * 4, CELL_SIZE * 40, CELL_SIZE * 4, settings);
+    const chunk = store.ensure(0, 0);
+    chunk.heights.fill(100);
+    chunk.heights[cellIndex(20, 20)] = 900;   // резкий пик
+    return store;
+  };
+
+  it('pulls a spike down towards its neighbours', () => {
+    const store = spikeStore();
+    const centre = CELL_SIZE * 20 + CELL_SIZE / 2;
+    smoothBrush(store, centre, centre, CELL_SIZE * 6, 1);
+    const peak = store.get(0, 0)!.heights[cellIndex(20, 20)];
+    expect(peak).toBeLessThan(900);
+    expect(peak).toBeGreaterThan(100);
+  });
+
+  it('converges towards the local average, never past it', () => {
+    const store = spikeStore();
+    const centre = CELL_SIZE * 20 + CELL_SIZE / 2;
+    for (let i = 0; i < 40; i++) smoothBrush(store, centre, centre, CELL_SIZE * 6, 1);
+    const peak = store.get(0, 0)!.heights[cellIndex(20, 20)];
+    expect(peak).toBeGreaterThanOrEqual(100);
+    expect(peak).toBeLessThan(200);
+  });
+
+  it('leaves already flat terrain untouched', () => {
+    const store = createChunkStore();
+    store.ensure(0, 0).heights.fill(250);
+    const centre = CELL_SIZE * 20 + CELL_SIZE / 2;
+    smoothBrush(store, centre, centre, CELL_SIZE * 6, 1);
+    expect(store.get(0, 0)!.heights[cellIndex(20, 20)]).toBeCloseTo(250, 3);
+  });
+
+  it('marks the touched chunk dirty', () => {
+    const store = spikeStore();
+    store.takeDirty();
+    smoothBrush(store, CELL_SIZE * 20, CELL_SIZE * 20, CELL_SIZE * 6, 1);
+    expect(store.takeDirty().map((c) => [c.cx, c.cy])).toEqual([[0, 0]]);
+  });
+
+  it('smooths across a chunk boundary using the neighbour', () => {
+    const store = createChunkStore();
+    store.ensure(0, 0).heights.fill(0);
+    store.ensure(1, 0).heights.fill(800);
+    const seam = CHUNK_WORLD;
+    smoothBrush(store, seam, CHUNK_WORLD / 2, CELL_SIZE * 8, 1);
+    // Последняя ячейка левого чанка должна подтянуться вверх к соседу.
+    const left = store.get(0, 0)!.heights[cellIndex(63, 31)];
+    expect(left).toBeGreaterThan(0);
+  });
+
+  it('does nothing for a zero radius or zero amount', () => {
+    const store = spikeStore();
+    store.takeDirty();
+    smoothBrush(store, 100, 100, 0, 1);
+    smoothBrush(store, 100, 100, 50, 0);
+    expect(store.hasDirty()).toBe(false);
+  });
+});
+
+describe('paintStroke', () => {
+  const settings = { radius: CELL_SIZE * 4, strength: 100, mode: 'raise' as const };
+
+  it('applies while the pointer stays still', () => {
+    const store = createChunkStore();
+    const centre = CHUNK_WORLD / 2;
+    const at = { x: centre, y: centre };
+    paintStroke(store, at, at, 'sculpt', settings, 1);
+    const { ix, iy } = worldToCell(centre, centre);
+    expect(store.get(0, 0)!.heights[cellIndex(ix, iy)]).toBeGreaterThan(0);
+  });
+
+  it('scales the applied amount with elapsed time', () => {
+    const centre = CHUNK_WORLD / 2;
+    const at = { x: centre, y: centre };
+    const { ix, iy } = worldToCell(centre, centre);
+
+    const short = createChunkStore();
+    paintStroke(short, at, at, 'sculpt', settings, 0.25);
+    const long = createChunkStore();
+    paintStroke(long, at, at, 'sculpt', settings, 1);
+
+    expect(long.get(0, 0)!.heights[cellIndex(ix, iy)])
+      .toBeCloseTo(short.get(0, 0)!.heights[cellIndex(ix, iy)] * 4, 3);
+  });
+
+  it('spreads a moving stroke over the whole path', () => {
+    const store = createChunkStore();
+    const y = CHUNK_WORLD / 2;
+    paintStroke(store, { x: CELL_SIZE * 6, y }, { x: CELL_SIZE * 40, y },
+                'sculpt', settings, 1);
     const heights = store.get(0, 0)!.heights;
-    for (let ix = 5; ix <= 39; ix++) {
-      expect(heights[cellIndex(ix, 4)]).toBeGreaterThan(0);
+    const row = worldToCell(0, y).iy;
+    for (let ix = 8; ix <= 38; ix++) {
+      expect(heights[cellIndex(ix, row)]).toBeGreaterThan(0);
     }
+  });
+
+  it('lowers when the mode is lower', () => {
+    const store = createChunkStore();
+    const centre = CHUNK_WORLD / 2;
+    const at = { x: centre, y: centre };
+    paintStroke(store, at, at, 'sculpt', { ...settings, mode: 'lower' }, 1);
+    const { ix, iy } = worldToCell(centre, centre);
+    expect(store.get(0, 0)!.heights[cellIndex(ix, iy)]).toBeLessThan(0);
+  });
+
+  it('does nothing for zero elapsed time', () => {
+    const store = createChunkStore();
+    const at = { x: CHUNK_WORLD / 2, y: CHUNK_WORLD / 2 };
+    paintStroke(store, at, at, 'sculpt', settings, 0);
+    expect(store.hasDirty()).toBe(false);
   });
 });

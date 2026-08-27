@@ -1,68 +1,114 @@
 import { create } from 'zustand';
-import { strokeBrush, stampBrush, type BrushSettings } from './brush';
+import { paintStroke, type BrushShape, type BrushSettings } from './brush';
 import type { TerrainLayer } from './terrainLayer';
-import type { FreehandHandlers } from '../tools/freehand';
+
+export const MIN_RADIUS = 16;
+export const MAX_RADIUS = 600;
+export const MIN_STRENGTH = 5;
+export const MAX_STRENGTH = 400;
+
+const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+
+/** Один «щелчок» колеса меняет величину на этот множитель. */
+const WHEEL_STEP = 1.12;
 
 interface TerrainToolState {
   radius: number;
+  /** Единиц высоты в секунду: кисть действует и при неподвижном курсоре. */
   strength: number;
-  mode: 'raise' | 'lower';
-  /** true, пока пользователь ведёт мазок: чужие снепшоты его не затирают. */
+  shape: BrushShape;
+  /** true, пока идёт мазок: чужие снепшоты его не затирают. */
   painting: boolean;
   setRadius(v: number): void;
   setStrength(v: number): void;
-  setMode(v: 'raise' | 'lower'): void;
+  setShape(v: BrushShape): void;
+  /** notches > 0 — колесо от себя. */
+  nudgeRadius(notches: number): void;
+  nudgeStrength(notches: number): void;
 }
 
-export const useTerrainTool = create<TerrainToolState>((set) => ({
+export const useTerrainTool = create<TerrainToolState>((set, get) => ({
   radius: 120,
-  strength: 60,
-  mode: 'raise',
+  strength: 220,
+  shape: 'sculpt',
   painting: false,
-  setRadius: (radius) => set({ radius }),
-  setStrength: (strength) => set({ strength }),
-  setMode: (mode) => set({ mode }),
+  setRadius: (radius) => set({ radius: clamp(radius, MIN_RADIUS, MAX_RADIUS) }),
+  setStrength: (strength) => set({ strength: clamp(strength, MIN_STRENGTH, MAX_STRENGTH) }),
+  setShape: (shape) => set({ shape }),
+  nudgeRadius: (notches) => {
+    const next = get().radius * Math.pow(WHEEL_STEP, notches);
+    set({ radius: Math.round(clamp(next, MIN_RADIUS, MAX_RADIUS)) });
+  },
+  nudgeStrength: (notches) => {
+    const next = get().strength * Math.pow(WHEEL_STEP, notches);
+    set({ strength: Math.round(clamp(next, MIN_STRENGTH, MAX_STRENGTH)) });
+  },
 }));
 
-/**
- * Кисть рельефа. Пока кнопка зажата, рисование полностью локальное —
- * на сервер ничего не уходит (ТЗ §5.4). onStrokeEnd вызывается при отпускании
- * и обязан отправить изменённые чанки (ТЗ §5.5).
- */
-export function makeTerrainHandlers(
+/** Левая кнопка понижает, правая повышает. */
+export function modeForButton(button: number): BrushSettings['mode'] | null {
+  if (button === 0) return 'lower';
+  if (button === 2) return 'raise';
+  return null;
+}
+
+export interface TerrainPainter {
+  begin(button: number, worldX: number, worldY: number): boolean;
+  moveTo(worldX: number, worldY: number): void;
+  /** Вызывается каждый кадр: рельеф меняется и когда курсор стоит. */
+  tick(seconds: number): void;
+  end(): void;
+  isPainting(): boolean;
+}
+
+export function createTerrainPainter(
   layer: TerrainLayer,
   onStrokeEnd: () => void,
-): FreehandHandlers {
+): TerrainPainter {
+  let mode: BrushSettings['mode'] | null = null;
   let lastX = 0;
   let lastY = 0;
-  let inverted = false;
-
-  const settings = (): BrushSettings => {
-    const { radius, strength, mode } = useTerrainTool.getState();
-    const effective = inverted ? (mode === 'raise' ? 'lower' : 'raise') : mode;
-    return { radius, strength, mode: effective };
-  };
-
-  const finish = () => {
-    inverted = false;
-    useTerrainTool.setState({ painting: false });
-    onStrokeEnd();
-  };
+  let currentX = 0;
+  let currentY = 0;
 
   return {
-    onStart(x, y, event) {
-      inverted = event.altKey;   // Alt — временная инверсия режима (ТЗ §5.4)
-      lastX = x;
-      lastY = y;
+    begin(button, worldX, worldY) {
+      const next = modeForButton(button);
+      if (!next) return false;
+      mode = next;
+      lastX = currentX = worldX;
+      lastY = currentY = worldY;
       useTerrainTool.setState({ painting: true });
-      stampBrush(layer.store, x, y, settings());
+      return true;
     },
-    onMove(x, y) {
-      strokeBrush(layer.store, lastX, lastY, x, y, settings());
-      lastX = x;
-      lastY = y;
+
+    moveTo(worldX, worldY) {
+      currentX = worldX;
+      currentY = worldY;
     },
-    onFinish: finish,
-    onCancel: finish,
+
+    tick(seconds) {
+      if (!mode || seconds <= 0) return;
+      const { radius, strength, shape } = useTerrainTool.getState();
+      paintStroke(
+        layer.store,
+        { x: lastX, y: lastY },
+        { x: currentX, y: currentY },
+        shape,
+        { radius, strength, mode },
+        seconds,
+      );
+      lastX = currentX;
+      lastY = currentY;
+    },
+
+    end() {
+      if (!mode) return;
+      mode = null;
+      useTerrainTool.setState({ painting: false });
+      onStrokeEnd();   // ТЗ §5.5: сохранение при отпускании обязательно
+    },
+
+    isPainting: () => mode !== null,
   };
 }

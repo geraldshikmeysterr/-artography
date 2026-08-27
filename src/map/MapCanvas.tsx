@@ -3,14 +3,13 @@ import { createStage, applyCamera, type Stage } from './stage';
 import { createGridLayer } from './gridLayer';
 import { createBrushCursor } from './brushCursor';
 import { attachCameraInput } from './cameraInput';
-import { attachFreehand } from './tools/freehand';
-import { screenToWorld } from './camera';
+import { screenToWorld, visibleWorldBounds } from './camera';
 import { createChunkStore } from './terrain/chunkStore';
 import { createTerrainLayer, isTerrainVisible, type TerrainLayer } from './terrain/terrainLayer';
-import { makeTerrainHandlers, useTerrainTool } from './terrain/terrainTool';
+import { createTerrainPainter, useTerrainTool } from './terrain/terrainTool';
+import { attachTerrainInput } from './terrain/terrainInput';
 import { createTerrainSync } from './terrain/terrainSync';
 import { chunkRange } from './terrain/chunkMath';
-import { visibleWorldBounds } from './camera';
 import { useAppStore } from '../state/store';
 import { useSeaLevel } from '../state/seaLevel';
 
@@ -50,7 +49,7 @@ export function MapCanvas() {
 
       const redraw = () => {
         const { camera, viewport, tool } = useAppStore.getState();
-        const { radius, mode } = useTerrainTool.getState();
+        const { radius, shape } = useTerrainTool.getState();
 
         applyCamera(created, camera, viewport);
         terrainLayer.update(camera, viewport, useSeaLevel.getState().value);
@@ -67,13 +66,21 @@ export function MapCanvas() {
         grid.view.visible = !isTerrainVisible(camera.zoom);
         if (grid.view.visible) grid.update(camera, viewport);
 
-        brushCursor.update(camera, tool === 'terrain', radius, mode);
+        brushCursor.update(camera, tool === 'terrain', radius, shape);
       };
 
-      // Пока идёт мазок, перерисовываем каждый кадр: высоты меняются
-      // непрерывно, а сторы во время мазка не обновляются.
-      created.app.ticker.add(() => {
-        if (useTerrainTool.getState().painting) redraw();
+      // ТЗ §5.5: при отпускании кнопки сохраняем обязательно.
+      const painter = createTerrainPainter(terrainLayer, () => {
+        redraw();
+        void sync.flush();
+      });
+
+      // Кисть работает по времени, а не по событиям мыши: пока кнопка зажата,
+      // рельеф меняется и при неподвижном курсоре.
+      created.app.ticker.add((ticker) => {
+        if (!painter.isPainting()) return;
+        painter.tick(ticker.deltaMS / 1000);
+        redraw();
       });
 
       const onHostPointerMove = (e: PointerEvent) => {
@@ -82,18 +89,10 @@ export function MapCanvas() {
         const { camera, viewport } = useAppStore.getState();
         const w = screenToWorld(camera, e.clientX - rect.left, e.clientY - rect.top, viewport);
         brushCursor.setPosition(w.x, w.y);
-        if (!useTerrainTool.getState().painting) redraw();
+        if (!painter.isPainting()) redraw();
       };
       host.addEventListener('pointermove', onHostPointerMove);
       detachers.push(() => host.removeEventListener('pointermove', onHostPointerMove));
-
-      // ТЗ §5.5: при отпускании кнопки сохраняем обязательно.
-      const terrainHandlers = makeTerrainHandlers(terrainLayer, () => {
-        redraw();
-        void sync.flush();
-      });
-      detachers.push(attachFreehand(host, () =>
-        useAppStore.getState().tool === 'terrain' ? terrainHandlers : null));
 
       const syncViewport = () => {
         useAppStore.getState().setViewport({
@@ -109,6 +108,8 @@ export function MapCanvas() {
         sync.stop();
       });
 
+      // Ввод кисти вешается раньше камеры: он перехватывает Ctrl/Shift+колесо.
+      detachers.push(attachTerrainInput(host, painter));
       detachers.push(attachCameraInput(host));
       detachers.push(useAppStore.subscribe(redraw));
       detachers.push(useTerrainTool.subscribe(redraw));

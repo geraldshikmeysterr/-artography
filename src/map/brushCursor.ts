@@ -16,14 +16,14 @@ export function createBrushCursor() {
     worldY = y;
   }
 
-  function update(camera: Camera, visible: boolean, radius: number, mode: 'raise' | 'lower') {
+  function update(camera: Camera, visible: boolean, radius: number, shape: 'sculpt' | 'smooth') {
     view.visible = visible;
     if (!visible) return;
     ring.clear();
     ring.circle(worldX, worldY, radius);
     ring.stroke({
       width: 1.5 / camera.zoom,
-      color: mode === 'raise' ? 0xffd479 : 0x7cc4ff,
+      color: shape === 'smooth' ? 0x7cd992 : 0xffd479,
       alpha: 0.9,
     });
     ring.circle(worldX, worldY, radius * 0.5);
