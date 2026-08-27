@@ -15,10 +15,10 @@
 ## Global Constraints
 
 - Все сервисы — **бесплатные тарифы** (Supabase free, Vercel free/hobby). Решения, увеличивающие трафик к Supabase, требуют обоснования. (ТЗ §1, §12)
-- Существующий Supabase-проект: ref `tomumajlfnqmcmcraawy`. Старые таблицы (`rivers`, `lakes`, `seas`) **сносятся**, схема создаётся заново. (ТЗ §1)
+- Существующий Supabase-проект: ref `hleafgtowbcgpjevvyno`. Старые таблицы (`rivers`, `lakes`, `seas`) **сносятся**, схема создаётся заново. (ТЗ §1)
 - GitHub-репозиторий: `github.com/geraldshikmeysterr/-artography`, публичный, пустой. (ТЗ §1)
 - `client_secret` Discord и бот-токен **никогда не попадают в браузер** — только внутри Supabase Edge Functions. (ТЗ §8.2)
-- Внутри Discord Activity прямые запросы к `*.supabase.co` блокируются: обязателен URL Mapping `/supabase → tomumajlfnqmcmcraawy.supabase.co` в Developer Portal **и** вызов `patchUrlMappings` на старте фронтенда. (ТЗ §8.4)
+- Внутри Discord Activity прямые запросы к `*.supabase.co` блокируются: обязателен URL Mapping `/supabase → hleafgtowbcgpjevvyno.supabase.co` в Developer Portal **и** вызов `patchUrlMappings` на старте фронтенда. (ТЗ §8.4)
 - **Перемещение по карте — только зажатым средним колесом мыши (кнопка 1) + drag. Левая кнопка никогда не панорамирует.** Зум — вращение колеса. (ТЗ §10)
 - Отдельного режима «Обзор»/«Перемещение» нет: клик по объекту работает всегда, независимо от активного инструмента. (ТЗ §10)
 - Никаких `prompt()`, `alert()`, `confirm()` в продуктовом коде. (ТЗ §10)
@@ -249,7 +249,7 @@ Expected: PASS, 2 теста.
 
 ```
 VITE_DISCORD_CLIENT_ID=
-VITE_SUPABASE_URL=https://tomumajlfnqmcmcraawy.supabase.co
+VITE_SUPABASE_URL=https://hleafgtowbcgpjevvyno.supabase.co
 VITE_SUPABASE_ANON_KEY=
 VITE_MAP_ID=
 ```
@@ -287,7 +287,7 @@ git push -u origin main
 
 ```bash
 supabase init
-supabase link --project-ref tomumajlfnqmcmcraawy
+supabase link --project-ref hleafgtowbcgpjevvyno
 ```
 
 - [ ] **Шаг 2: Написать миграцию**
@@ -1592,7 +1592,7 @@ Expected: URL вида `https://<project>.vercel.app`, страница откр
 
 - Activities → Settings → включить Activity, Root Mapping `/` → домен Vercel.
 - Activities → URL Mappings → добавить: prefix `/supabase`, target
-  `tomumajlfnqmcmcraawy.supabase.co` (ТЗ §8.4).
+  `hleafgtowbcgpjevvyno.supabase.co` (ТЗ §8.4).
 - OAuth2 → Redirects → добавить домен Vercel.
 
 - [ ] **Шаг 5: Проверить внутри Discord**

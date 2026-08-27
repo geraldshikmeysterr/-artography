@@ -713,8 +713,24 @@ describe('stampBrush', () => {
 
   it('marks the touched chunk dirty', () => {
     const store = createChunkStore();
-    stampBrush(store, 10, 10, { radius: 20, strength: 10, mode: 'raise' });
+    const middle = CHUNK_WORLD / 2;
+    stampBrush(store, middle, middle, { radius: 20, strength: 10, mode: 'raise' });
     expect(store.takeDirty().map((c) => [c.cx, c.cy])).toEqual([[0, 0]]);
+  });
+
+  it('does not create neighbouring chunks the round brush never reaches', () => {
+    const store = createChunkStore();
+    const middle = CHUNK_WORLD / 2;
+    stampBrush(store, middle, middle, { radius: 20, strength: 10, mode: 'raise' });
+    expect(store.size()).toBe(1);
+  });
+
+  it('spills into a neighbour only where cells are actually covered', () => {
+    const store = createChunkStore();
+    // Кисть у самого начала координат достаёт до всех четырёх соседних чанков.
+    stampBrush(store, 10, 10, { radius: 20, strength: 10, mode: 'raise' });
+    const touched = store.takeDirty().map((c) => `${c.cx},${c.cy}`).sort();
+    expect(touched).toEqual(['-1,-1', '-1,0', '0,-1', '0,0']);
   });
 
   it('spills across a chunk boundary and marks both chunks dirty', () => {
@@ -800,7 +816,6 @@ export function stampBrush(
 
   for (let cy = minCY; cy <= maxCY; cy++) {
     for (let cx = minCX; cx <= maxCX; cx++) {
-      const chunk = store.ensure(cx, cy);
       const originX = cx * CHUNK_WORLD;
       const originY = cy * CHUNK_WORLD;
 
@@ -809,20 +824,23 @@ export function stampBrush(
       const iy0 = Math.max(0, Math.floor((worldY - radius - originY) / CELL_SIZE));
       const iy1 = Math.min(CHUNK_CELLS - 1, Math.ceil((worldY + radius - originY) / CELL_SIZE));
 
-      let touched = false;
+      // Чанк создаётся только когда под кисть реально попала хоть одна ячейка:
+      // круглая кисть не покрывает углы своего bbox, и пустые чанки на краях
+      // иначе засоряли бы хранилище и уходили бы на сервер как «изменённые».
+      let chunk: ReturnType<ChunkStore['ensure']> | undefined;
       for (let iy = iy0; iy <= iy1; iy++) {
         const cellY = originY + (iy + 0.5) * CELL_SIZE;
         for (let ix = ix0; ix <= ix1; ix++) {
           const cellX = originX + (ix + 0.5) * CELL_SIZE;
           const weight = falloff(Math.hypot(cellX - worldX, cellY - worldY), radius);
           if (weight === 0) continue;
+          chunk ??= store.ensure(cx, cy);
           const index = cellIndex(ix, iy);
           const next = chunk.heights[index] + signedStrength * weight;
           chunk.heights[index] = Math.max(HEIGHT_MIN, Math.min(HEIGHT_MAX, next));
-          touched = true;
         }
       }
-      if (touched) {
+      if (chunk) {
         chunk.revision += 1;
         store.markDirty(cx, cy);
       }
