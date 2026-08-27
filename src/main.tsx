@@ -1,8 +1,9 @@
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
-import { ENV, ENV_ERROR } from './env';
+import { ENV_ERROR } from './env';
 import { ConfigError } from './ui/ConfigError';
-import { useAppStore, type Session } from './state/store';
+import { startSession } from './session/session';
+import { useAppStore } from './state/store';
 
 const root = createRoot(document.getElementById('root')!);
 
@@ -11,14 +12,17 @@ if (ENV_ERROR) {
 } else {
   root.render(<App />);
 
-  // Временная заглушка сессии. Заменяется на startSession() из
-  // src/session/session.ts в Плане 01, Task 7 (Discord OAuth).
-  const stubSession: Session = {
-    userId: 'local',
-    username: 'Локальный просмотр',
-    avatarUrl: null,
-    token: null,
-    canEdit: ENV.devCanEdit,
-  };
-  useAppStore.getState().setSession(stubSession);
+  void startSession()
+    .then((session) => useAppStore.getState().setSession(session))
+    .catch((cause) => {
+      // Авторизация упала — карта всё равно должна открыться на просмотр.
+      console.error('session failed', cause);
+      useAppStore.getState().setSession({
+        userId: 'anonymous',
+        username: 'Гость',
+        avatarUrl: null,
+        token: null,
+        canEdit: false,
+      });
+    });
 }
